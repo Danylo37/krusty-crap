@@ -38,6 +38,7 @@ rolling_drone = {git = "https://github.com/giorebecchi/RollingDrone.git"}
 bobry_w_locie = {git = "https://github.com/Seregno/Public_Bry_w_locie.git"}
 rusty_drones = {git = "https://github.com/rusty-drone-2024/rusty-drone.git" }
 time = "0.3.37"
+ordered-float = "5.0.0"
 
 
 

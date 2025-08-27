@@ -1,5 +1,7 @@
-use crate::clients::client_chen::{ClientChen, PacketResponseHandler, Router, Sending};
+use crate::clients::client_chen::{ClientChen, NodeInfo, PacketResponseHandler, Router, Sending, SpecificInfo};
 use crate::clients::client_chen::prelude::*;
+use crate::clients::client_chen::routing_algorithms::dijkstra::DijkstraRouting;
+use crate::clients::client_chen::routing_algorithms::routing_trait::shortest_path_with_algorithm;
 use crate::general_use::PacketStatus::{Sent, WaitingForFixing};
 
 impl PacketResponseHandler for ClientChen {
@@ -43,7 +45,27 @@ impl PacketResponseHandler for ClientChen {
             warn!("Removed broken connection to node {} from packet_send", node_id);
         }
 
-        println!("Routing error encountered for node {}: Drone crashed or sender not found", node_id);
+        println!("-------NACK--------");
+        println!("Nack: routing error encountered in drone {}: crashed or sender not found", node_id);
+
+        //remove the drone from the topology, and also from the connected_ids of routers that are connected to it.
+        //the ideal is to only remove from the connected_ids of the router before it, but since we don't know the implementation
+        //of the sending process of the nack of each drone, we just simplify.
+
+        let connected_nodes = if let Some(node_info) = self.network_info.topology.get(&node_id) {
+            node_info.connected_nodes_ids.clone()  // Clone to avoid holding reference
+        } else {
+            HashSet::new()  // Return empty vec if source node not found
+        };
+
+        // Now iterate and mutate (mutable borrow - separate from immutable borrow)
+        for node_id_to_update in connected_nodes {
+            if let Some(node_info) = self.network_info.topology.get_mut(&node_id_to_update) {
+                node_info.connected_nodes_ids.remove(&node_id);
+            }
+        }
+
+        self.network_info.topology.remove(&node_id);
 
         let session_id = nack_packet_session_id;
         let fragment_index = nack.fragment_index;
@@ -61,35 +83,21 @@ impl PacketResponseHandler for ClientChen {
 
         let option_packet_to_send = {
             if let Some(mut packet) = opt_packet {
-                println!("DEBUGGING SESSION ID: {}", packet.session_id);
+                println!("Need to resend the packet with same session id: {}", packet.session_id);
                 let opt_destination = packet.routing_header.destination();
                 if let Some(destination) = opt_destination {
-                    let pack = match self.communication.routing_table.get(&destination) {
-                        Some(routes) => {
-                            // Case 1: Still the wrong path memorized
-                            println!("FLOODING DEBUGGING ERROR NODE IS: {} AND THE ROUTES: {:#?}", node_id, routes);
-                            if routes.clone().contains(&node_id) {
-                                self.do_flooding();
-                                None
-                            }
-                            // Case 2: We have the ok path, so it returns the packet to send
-                            else if !routes.is_empty() {
-                                let source_routing_header = SourceRoutingHeader::initialize(routes.clone());
-                                packet.routing_header = source_routing_header; // Perform the update
-                                println!("DEBUGGING ERROR NODE IS: {} AND THE ROUTES: {:#?}", node_id, routes);
-                                Some(packet.clone())
-                            }
-                            // Case 3: When the routing table doesn't contain the wrong route and is empty
-                            else {
-                                None
-                            }
-                        }
 
-                        // No corresponding entry in the routing table
-                        None => None,
-                    };
+                    //send by calculating with dijkstra algorithm
+                    let path = shortest_path_with_algorithm(&DijkstraRouting, self.metadata.node_id, destination, &self.network_info.topology);
+                    println!("But first get routing through Dijkstra algorithm");
 
-                    pack  // Packet to send
+                    if let Some(path) = path{
+                        println!("Dijkstra Path: {:?}", path);
+                        packet.routing_header = SourceRoutingHeader::initialize(path);
+                        Some(packet.clone())
+                    } else{
+                        None
+                    }
                 } else {
                     None // Packet to send
                 }
@@ -103,8 +111,10 @@ impl PacketResponseHandler for ClientChen {
         if let Some(p) = option_packet_to_send {
             // Notice that by sending, it will automatically update the PacketStatus
             self.send(p);
-            println!("DEBUGGING PACKET SESSION ID SENT: {}", session_id);
+            println!("Packet of session {} resent", session_id);
         }
+
+        println!("-------END NACK--------");
     }
     fn handle_destination_is_drone(&mut self, nack_packet_session_id: SessionId, nack: &Nack) {
         let session_id = nack_packet_session_id;
@@ -112,11 +122,12 @@ impl PacketResponseHandler for ClientChen {
         self.storage.output_buffer.remove(&(session_id));  //we don't want anymore this packet.
     }
     fn handle_packet_dropped(&mut self, nack_packet: Packet, nack: &Nack) {
-        //println!("query packet_dropped");
+        println!("Packet of session {} is dropped from drone {}", nack_packet.session_id, nack_packet.routing_header.source().unwrap());
+
         let session_id = nack_packet.session_id;
 
         // When the drone pdr is very high then we need to fix, we give him chance up to 10 times repeating pack drop.
-        if let Some(drone) = nack_packet.routing_header.source() {
+        /*if let Some(drone) = nack_packet.routing_header.source() {
             let map = self
                 .communication
                 .drops_counter
@@ -139,23 +150,66 @@ impl PacketResponseHandler for ClientChen {
 
                 return;
             }
-        }
+        }*/
 
+
+        let prev_cost:f32;
+        // Augment the costs in Dijkstra algorithm
+        if let Some(drone) = nack_packet.routing_header.source() {
+            if let Some(node_info) = self.network_info.topology.get_mut(&drone) {
+                let mut pdr : f32 = 0.0;
+                if let SpecificInfo::DroneInfo(drone_info) = &mut node_info.specific_info {
+                    drone_info.dropped_count += 1;
+                    pdr = drone_info.dropped_count as f32 / drone_info.sent_count as f32;
+                }
+                prev_cost = node_info.routing_cost;
+                node_info.routing_cost = 1f32/(1f32 - pdr.max(0.0).min(0.99));
+                println!("Cost of the drone {} increased from {} to {}", drone, prev_cost, node_info.routing_cost);
+            }
+
+        }
         self.update_packet_status(
             session_id,
             nack.fragment_index,
             PacketStatus::NotSent(NotSentType::Dropped),
         );
 
-        if let Some(map) = self.storage.output_buffer.get(&session_id) {
-            if let Some(packet) = map.get(&nack.fragment_index) {
-                // Notice that the packet status will be automatically updated
-                self.send(packet.clone());
+        let opt_packet = self.storage.output_buffer
+            .get_mut(&session_id)
+            .and_then(|fragments| fragments.get_mut(&nack.fragment_index))
+            .cloned();
+
+        let option_packet_to_send = {
+            if let Some(mut packet) = opt_packet {
+                println!("Need to resend the packet with same session id: {}", packet.session_id);
+                let opt_destination = packet.routing_header.destination();
+                if let Some(destination) = opt_destination {
+
+                    //send by calculating with dijkstra algorithm
+                    let path = shortest_path_with_algorithm(&DijkstraRouting, self.metadata.node_id, destination, &self.network_info.topology);
+                    println!("But first get routing through Dijkstra algorithm");
+
+                    if let Some(path) = path{
+                        println!("Dijkstra Path: {:?}", path);
+                        packet.routing_header = SourceRoutingHeader::initialize(path);
+                        Some(packet.clone())
+                    } else{
+                        None
+                    }
+                } else {
+                    None // Packet to send
+                }
             } else {
-                println!("Dropped packet not found in output buffer");
+                warn!("Packet not found in output buffer (Session: {}, Fragment: {})", session_id, nack.fragment_index);
+                None
             }
-        } else {
-            println!("Dropped packet not found in output buffer");
+        };
+
+        // Send the packet when conditions are satisfied
+        if let Some(p) = option_packet_to_send {
+            // Notice that by sending, it will automatically update the PacketStatus
+            self.send(p);
+            println!("Packet of session {} resent", session_id);
         }
 
         /*println!(
@@ -183,37 +237,19 @@ impl PacketResponseHandler for ClientChen {
             .and_then(|fragments| fragments.get_mut(&fragment_index))
             .cloned();
 
+
         let option_packet_to_send = {
             if let Some(mut packet) = opt_packet {
                 println!("DEBUGGING SESSION ID: {}", packet.session_id);
                 let opt_destination = packet.routing_header.destination();
                 if let Some(destination) = opt_destination {
-                    let pack = match self.communication.routing_table.get(&destination) {
-                        Some(routes) => {
-                            // Case 1: Still the wrong path memorized
-                            println!("DEBUGGING ERROR NODE IS: {} AND THE ROUTES: {:#?}", node_id, routes);
-                            if routes.clone().contains(&node_id) {
-                                self.do_flooding();
-                                None
-                            }
-                            // Case 2: We have the ok path, so it returns the packet to send
-                            else if !routes.is_empty() {
-                                let source_routing_header = SourceRoutingHeader::initialize(routes.clone());
-                                packet.routing_header = source_routing_header; // Perform the update
-                                println!("DEBUGGING ERROR NODE IS: {} AND THE ROUTES: {:#?}", node_id, routes);
-                                Some(packet.clone())
-                            }
-                            // Case 3: When the routing table doesn't contain the wrong route and is empty
-                            else {
-                                None
-                            }
-                        }
-
-                        // No corresponding entry in the routing table
-                        None => None,
-                    };
-
-                    pack  // Packet to send
+                    let path = shortest_path_with_algorithm(&DijkstraRouting, self.metadata.node_id, destination, &self.network_info.topology);
+                    if let Some(path) = path{
+                        packet.routing_header = SourceRoutingHeader::initialize(path);
+                        Some(packet.clone())
+                    } else{
+                        None
+                    }
                 } else {
                     None // Packet to send
                 }

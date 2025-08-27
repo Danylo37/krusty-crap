@@ -1,5 +1,8 @@
 use crate::clients::client_chen::{ClientChen, PacketCreator};
 use crate::clients::client_chen::prelude::*;
+use crate::clients::client_chen::routing_algorithms::dijkstra::DijkstraRouting;
+use crate::clients::client_chen::routing_algorithms::routing_trait::shortest_path_with_algorithm;
+
 impl PacketCreator for ClientChen{
     fn divide_string_into_slices(&mut self, string: String, max_slice_length: usize) -> Vec<String> {
         let mut slices = Vec::new();
@@ -115,7 +118,7 @@ impl PacketCreator for ClientChen{
     /// find source routing header by searching the hops from the routing table
     fn get_source_routing_header(&mut self, destination_id: NodeId) -> Option<SourceRoutingHeader> {
         // Get the routes for the destination ID
-        if let Some(routes) = self.communication.routing_table.get(&destination_id) {
+        if let Some(routes) = shortest_path_with_algorithm(&DijkstraRouting, self.metadata.node_id, destination_id, &self.network_info.topology) {
             return Some(SourceRoutingHeader::initialize(routes.clone()));
         }
         // Return None if no valid path is found

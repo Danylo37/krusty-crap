@@ -950,6 +950,7 @@
     // Create a WebSocket connection to the Rust server
     const wsHost = window.location.hostname || 'localhost';
     const ws = new WebSocket(`ws://${wsHost}:8080`);
+    window.ws = ws;
 
 
     // Nodes-tracker
@@ -965,11 +966,15 @@
     ];
     let current_role_chosen = roles_vector[0];
     let currentClientId = null; // Global variable
+    window.currentClientId = currentClientId;
 
 
     // Container for all panels
     const monitoringContainer = document.getElementById("monitoring-container");
     const requestedMedia = new Set(); // Track requested media references
+    window.requestedMedia = requestedMedia;
+
+    // Globals are exposed by client.js as window.phonebooks and window.file_lists
 
 
 
@@ -1100,6 +1105,7 @@
 
     function chooseClient(nodeId) {
         currentClientId = nodeId;
+        window.currentClientId = nodeId;
         document.querySelector('.whatsapp-title').textContent = `WhatsApp - Current Client Id: ${currentClientId}`;
 
         // Find the panel corresponding to the selected nodeId
@@ -2103,7 +2109,7 @@
 
 
 </script>
-<script src="js/client.js"></script>
-<script src="js/controller.js"></script>
+<script src="js_build/client.js" type="text/javascript"></script>
+<script src="js_build/controller.js"></script>
 </body>
 </html>

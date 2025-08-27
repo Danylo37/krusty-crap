@@ -59,7 +59,6 @@ impl TraitClient for ClientChen {
             communication: CommunicationInfo {
                 servers: HashSet::new(),
                 connected_nodes_ids: connected_nodes,
-                routing_table: HashMap::new(),
                 drops_counter: HashMap::new(),
             },
 
@@ -146,7 +145,6 @@ pub(crate) struct NodeStatus {
 pub(crate) struct CommunicationInfo {
     pub(crate) servers: HashSet<ServerId>,
     pub(crate) connected_nodes_ids: HashSet<NodeId>,
-    pub(crate) routing_table: HashMap<NodeId, Vec<NodeId>>, // Routing information per protocol
     pub(super) drops_counter: HashMap<SessionId, HashMap<DroneId, u8>>, // Counter for dropped packets
 }
 
@@ -171,10 +169,7 @@ pub struct NodeStorage {
     pub(crate) current_text_media_list: Vec<MediaRef>,
     pub(crate) current_chosen_media_ref: MediaRef,
     pub(crate) current_received_serialized_media: HashMap<MediaRef, String>,
-    //pub(crate) current_chosen_media: String,
 }
-
-
 
 #[derive(Clone,Serialize, Deserialize)]
 pub(crate) struct NetworkInfo{
@@ -184,6 +179,8 @@ pub(crate) struct NetworkInfo{
 #[derive(Default, Clone, Serialize, Deserialize, Debug)]
 pub struct NodeInfo{
     pub(crate) node_id: NodeId,
+    pub(crate) connected_nodes_ids: HashSet<NodeId>,
+    pub (crate) routing_cost: f32, //Dijkstra cost, that increases when ever the packet drops.
     pub(crate) specific_info: SpecificInfo,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -202,19 +199,18 @@ impl Default for SpecificInfo {
 
 #[derive(Debug,Clone, Serialize, Deserialize, Default)]
 pub struct ClientInformation {
-    pub(crate) connected_nodes_ids: HashSet<NodeId>,
 }
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerInformation {
-    pub(crate) connected_nodes_ids: HashSet<NodeId>,
     pub(crate) server_type: ServerType,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DroneInformation {
-    pub(crate) connected_nodes_ids: HashSet<NodeId>,
+    pub(crate) dropped_count: usize,
+    pub(crate) sent_count: usize,
 }
 
 

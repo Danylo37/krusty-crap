@@ -5,7 +5,9 @@ pub mod client_chen;
 pub mod web_browser_client_traits;
 pub mod ui;
 pub mod functionality_test;
+pub mod routing_algorithms;
 
 pub use client_chen::*;
 pub use prelude::*;
 pub use general_client_traits::*;
+

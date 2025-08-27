@@ -24,8 +24,8 @@ pub trait Sending{
 pub trait Router{
     ///main method of for discovering the routing
     fn do_flooding(&mut self);
-    fn update_routing_for_server(&mut self, destination_id: NodeId, path_trace: Vec<(NodeId,NodeType)>);
-    fn update_routing_for_client(&mut self, destination_id: NodeId, path_trace: Vec<(NodeId,NodeType)>);
+    fn send_query_to_server_if_needed(&mut self, destination_id: NodeId, path_trace: Vec<(NodeId,NodeType)>);
+    fn send_query_to_client_if_needed(&mut self, destination_id: NodeId, path_trace: Vec<(NodeId,NodeType)>);
 
     //auxiliary function
     fn get_flood_response_initiator(&mut self, flood_response: FloodResponse) -> NodeId;

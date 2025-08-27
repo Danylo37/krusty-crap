@@ -2,5 +2,8 @@
   "dependencies": {
     "@msgpack/msgpack": "^2.7.0",
     "msgpack-lite": "^0.1.26"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
   }
 }

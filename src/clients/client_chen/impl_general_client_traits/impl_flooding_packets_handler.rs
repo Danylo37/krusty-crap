@@ -38,59 +38,45 @@ impl FloodingPacketsHandler for ClientChen {
             // Peek the next node in the path_trace (use the item without consuming it)
             let next_node = path_iter.peek().map(|&(next_id, _)| next_id);
             // Ensure entry exists for the node, so create a raw one when it is not created for the node
-            let entry = self.network_info.topology.entry(node_id).or_insert_with(|| {
+            let node_info = self.network_info.topology.entry(node_id).or_insert_with(|| {
                 match node_type {
                     NodeType::Server => {
                         NodeInfo {
                             node_id,
+                            connected_nodes_ids: HashSet::new(),
+                            routing_cost: 1.0,
                             specific_info: SpecificInfo::ServerInfo(ServerInformation {
                                 server_type: ServerType::Undefined,
-                                connected_nodes_ids: HashSet::new(),
                             }),
                         }
                     },
                     NodeType::Client => NodeInfo {
                         node_id,
+                        connected_nodes_ids: HashSet::new(),
+                        routing_cost: 1.0,
                         specific_info: SpecificInfo::ClientInfo(ClientInformation {
-                            connected_nodes_ids: HashSet::new(),
                         }),
                     },
                     NodeType::Drone => NodeInfo {
                         node_id,
+                        connected_nodes_ids: HashSet::new(),
+                        routing_cost: 1.0,
                         specific_info: SpecificInfo::DroneInfo(DroneInformation {
-                            connected_nodes_ids: HashSet::new(),
+                            dropped_count: 0,
+                            sent_count: 0,
                         }),
                     },
                 }
             });
 
             // Safely update connected_nodes_ids
-            match &mut entry.specific_info {
-                SpecificInfo::ServerInfo(server_info) => {
-                    if let Some(prev) = previous_node {
-                        server_info.connected_nodes_ids.insert(prev);
-                    }
-                    if let Some(&next) = next_node {
-                        server_info.connected_nodes_ids.insert(next);
-                    }
-                }
-                SpecificInfo::ClientInfo(client_info) => {
-                    if let Some(prev) = previous_node {
-                        client_info.connected_nodes_ids.insert(prev);
-                    }
-                    if let Some(&next) = next_node {
-                        client_info.connected_nodes_ids.insert(next);
-                    }
-                }
-                SpecificInfo::DroneInfo(drone_info) => {
-                    if let Some(prev) = previous_node {
-                        drone_info.connected_nodes_ids.insert(prev);
-                    }
-                    if let Some(&next) = next_node {
-                        drone_info.connected_nodes_ids.insert(next);
-                    }
-                }
+            if let Some(prev) = previous_node {
+                node_info.connected_nodes_ids.insert(prev);
             }
+            if let Some(&next) = next_node {
+                node_info.connected_nodes_ids.insert(next);
+            }
+
             // Update previous_node safely
             previous_node = Some(node_id);
         }
@@ -103,11 +89,10 @@ impl FloodingPacketsHandler for ClientChen {
             // Use match to call the correct update function
             match destination_type {
                 NodeType::Server => {
-                    //println!("|{:?}| CLIENT [{}] UPDATE SERVER [{}] with the path: {:?}", self.metadata.client_type , self.metadata.node_id , destination_id, response.path_trace);
-                    self.update_routing_for_server(destination_id, response.path_trace.clone());
+                    self.send_query_to_server_if_needed(destination_id, response.path_trace.clone());
                 }
                 NodeType::Client => {
-                    self.update_routing_for_client(destination_id, response.path_trace.clone());
+                    self.send_query_to_client_if_needed(destination_id, response.path_trace.clone());
                 }
                 _ => {}
             }

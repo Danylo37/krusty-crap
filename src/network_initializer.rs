@@ -36,6 +36,7 @@ use bagel_bomber::BagelBomber;
 use skylink::SkyLinkDrone;
 use RF_drone::RustAndFurious;
 use bobry_w_locie::drone::BoberDrone;
+use krusty_drone::KrustyCrapDrone;
 use log::info;
 use crate::clients::client_chen::Serialize;
 use crate::general_use::SpecificNodeType;
@@ -47,7 +48,7 @@ use crate::websocket::WsCommand;
 //Drone Enum + iterator over it
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Serialize)]
 pub enum DroneBrand {
-    //KrustyDrone,
+    KrustyDrone,
     RustyDrone,
     Rustable,
     BagelBomber,
@@ -59,16 +60,15 @@ pub enum DroneBrand {
     RollingDrones,
     BobryWLucie,
     Undefined,
-    KrustyDrone,
 }
 
 impl DroneBrand {
     // Returns an iterator over all variants of DroneBrand
     pub fn iter() -> impl Iterator<Item = DroneBrand> {
         [
-            //DroneBrand::KrustyDrone,     our drone
-            DroneBrand::RustyDrone,
-            //DroneBrand::Rustable,        not working
+            DroneBrand::KrustyDrone,
+            /*DroneBrand::RustyDrone,
+            DroneBrand::Rustable,
             DroneBrand::BagelBomber,
             DroneBrand::RustAndFurious,
             DroneBrand::Fungi,
@@ -76,7 +76,7 @@ impl DroneBrand {
             DroneBrand::RustEze,
             DroneBrand::SkyLink,
             DroneBrand::RollingDrones,
-            DroneBrand::BobryWLucie,
+            DroneBrand::BobryWLucie,*/
         ]
             .into_iter()
     }
@@ -210,7 +210,16 @@ impl NetworkInitializer {
 
             // Use helper function or macro (in this case function) to create and spawn drones based on their brand
             match self.choose_drone_brand_evenly() {
-                //DroneBrand::KrustyDrone => self.create_and_spawn_drone::<RustyDrone>(drone_params),
+                DroneBrand::KrustyDrone => {
+                    self.create_and_spawn_drone::<KrustyCrapDrone>(drone_params.clone());
+                    self.simulation_controller.drones_data.insert(drone_params.0, DisplayDataDrone {
+                        node_id: drone_params.0,
+                        node_type: SpecificNodeType::Drone,
+                        drone_brand: DroneBrand::KrustyDrone,
+                        connected_nodes_ids: Vec::new(),
+                        pdr: drone_params.5,
+                    });
+                },
                 DroneBrand::RustyDrone => {
                     self.create_and_spawn_drone::<RustyDrone>(drone_params.clone());
                     self.simulation_controller.drones_data.insert(drone_params.0, DisplayDataDrone {

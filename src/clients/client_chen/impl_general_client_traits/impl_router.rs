@@ -11,7 +11,6 @@ impl Router for ClientChen {
         self.status.flood_id += 1;
         self.status.session_id += 1;
 
-        self.communication.routing_table.clear();
         self.network_info.topology.clear();
 
         // Initialize the flood request with the current flood_id, id, and node type
@@ -34,47 +33,7 @@ impl Router for ClientChen {
             self.update_packet_status(packet.session_id, 0, Sent);
         }
     }
-    fn update_routing_for_server(&mut self, destination_id: NodeId, path_trace: Vec<(NodeId, NodeType)>) {
-        // Step 1: Extract hops from the path trace
-        let hops = self.get_hops_from_path_trace(path_trace);
-        // Step 2: Update the routing table of the route of the server
-        self.communication.routing_table.insert(destination_id, hops.clone());
 
-        // Step 3: Create a SourceRoutingHeader
-        let srh = SourceRoutingHeader::initialize(hops);
-
-        // Step 4: Update session_id before sending the query
-        self.status.session_id += 1;
-        // Step 5: Check server type and send query if necessary
-        let should_send_query = {
-            if let Some(node_info) = self.network_info.topology.get_mut(&destination_id) {
-                if let ServerInfo(server_info) = &mut node_info.specific_info {
-                    if matches!(server_info.server_type, Undefined) {
-                        // Update the server type to indicate we're waiting for a response
-                        server_info.server_type = WaitingForResponse;
-                        true // Indicate that we need to send a query
-                    } else {
-                        false // No query needed
-                    }
-                } else {
-                    false // No query needed
-                }
-            } else {
-                false // No query needed
-            }
-        };
-
-        // Step 5: Send the query if necessary
-        if should_send_query {
-            self.send_query_by_routing_header(srh, Query::AskType);
-        }
-    }
-    fn update_routing_for_client(&mut self, destination_id: NodeId, path_trace: Vec<(NodeId, NodeType)>) {
-        let hops = self.get_hops_from_path_trace(path_trace.clone());
-        self.communication.routing_table.insert(destination_id, hops);
-        info!("Successfully updated routing table for client {}", destination_id);
-        info!("The routing table is: {:?}", self.communication.routing_table);
-    }
 
     ///auxiliary function
     fn get_flood_response_initiator(&mut self, flood_response: FloodResponse) -> NodeId {
@@ -92,7 +51,6 @@ impl Router for ClientChen {
                     _ => {
                         // If the node exists but is not a ServerInfo, replace it
                         node_info.specific_info = SpecificInfo::ServerInfo(ServerInformation {
-                            connected_nodes_ids: Default::default(),
                             server_type,
                         });
                     }
@@ -102,13 +60,48 @@ impl Router for ClientChen {
                 // If the node doesn't exist, insert it as a new ServerInfo
                 entry.insert(NodeInfo {
                     node_id: initiator_id,
+                    connected_nodes_ids: Default::default(),
+                    routing_cost: 1.0,
                     specific_info: SpecificInfo::ServerInfo(ServerInformation {
-                        connected_nodes_ids: Default::default(),
                         server_type,
                     }),
                 });
             }
         }
+    }
+
+    fn send_query_to_server_if_needed(&mut self, destination_id: NodeId, path_trace: Vec<(NodeId, NodeType)>) {
+        let hops = self.get_hops_from_path_trace(path_trace);
+        let srh = SourceRoutingHeader::initialize(hops);
+        self.status.session_id += 1;
+        let should_send_query = {
+            if let Some(node_info) = self.network_info.topology.get_mut(&destination_id) {
+                if let ServerInfo(server_info) = &mut node_info.specific_info {
+                    if matches!(server_info.server_type, Undefined) {
+                        server_info.server_type = WaitingForResponse;
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        };
+        if should_send_query {
+            self.send_query_by_routing_header(srh, Query::AskType);
+        }
+    }
+
+    fn send_query_to_client_if_needed(&mut self, destination_id: NodeId, path_trace: Vec<(NodeId, NodeType)>) {
+        let hops = self.get_hops_from_path_trace(path_trace);
+        let srh = SourceRoutingHeader::initialize(hops);
+        self.status.session_id += 1;
+        // You can add logic here if you want to send a query to the client, e.g.:
+        // self.send_query_by_routing_header(srh, Query::AskClientInfo);
+        // For now, this is a placeholder for future client-specific queries.
     }
 
 }

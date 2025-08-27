@@ -35,7 +35,7 @@ fn main() {
             "\n\
     ┌──────────────────────────────────────────────────┐\n\
     │   🚀 To use the application, visit:              │\n\
-    │   🌍 http://localhost:8000/index.html            │\n\
+    │   🌍 http://localhost:9000/index.html            │\n\
     └──────────────────────────────────────────────────┘\n"
         );
         simulation_controller.run_with_monitoring(tx.clone());
@@ -47,9 +47,9 @@ fn main() {
 
     // Start HTTP server for web interface
     thread::spawn(|| {
-        //println!("HTTP server started on http://0.0.0.0:8000");
-        rouille::start_server("0.0.0.0:8000", move |request| {
-            rouille::match_assets(&request, "static")
+        //println!("HTTP server started on http://0.0.0.0:9000");
+        rouille::start_server("0.0.0.0:9000", move |request| {
+            rouille::match_assets(&request, "static_2")
         });
     });
 

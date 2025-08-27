@@ -1,5 +1,7 @@
-use crate::clients::client_chen::{ClientChen, PacketCreator, Sending};
+use crate::clients::client_chen::{ClientChen, PacketCreator, Sending, SpecificInfo};
 use crate::clients::client_chen::prelude::*;
+use crate::clients::client_chen::routing_algorithms::dijkstra::DijkstraRouting;
+use crate::clients::client_chen::routing_algorithms::routing_trait::shortest_path_with_algorithm;
 use crate::general_use::NotSentType::{RoutingError, ToBeSent};
 
 impl Sending for ClientChen {
@@ -35,11 +37,21 @@ impl Sending for ClientChen {
     }
 
     fn send(&mut self, packet: Packet) {
-        if let Some(next_hop) = packet.routing_header.next_hop() {
-            self.send_packet_to_connected_node(next_hop, packet);
+        let routing_header = &packet.routing_header;
+        if let Some(next_hop) = routing_header.next_hop() {
+            self.send_packet_to_connected_node(next_hop, packet.clone());
         } else {
             panic!("No next hop available for packet: {:?}", packet);
         }
+
+        for id in routing_header.hops.clone(){
+            if let Some(node_info) = self.network_info.topology.get_mut(&id){
+                if let SpecificInfo::DroneInfo(drone_info) = &mut node_info.specific_info{
+                    drone_info.sent_count += 1;
+                }
+            }
+        }
+
     }
 
     fn send_event(&mut self, client_event: ClientEvent) {
@@ -142,7 +154,7 @@ impl Sending for ClientChen {
 
 
     fn handle_not_sent_packet(&mut self, mut packet: Packet, not_sent_type: NotSentType, destination: NodeId) {
-        let route = self.communication.routing_table.get(&destination);
+        let route = shortest_path_with_algorithm(&DijkstraRouting, self.metadata.node_id, destination, &self.network_info.topology);
         match not_sent_type {
             //through
             NotSentType::RoutingError(drone_id) => {

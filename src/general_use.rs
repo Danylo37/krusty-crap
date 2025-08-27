@@ -7,6 +7,7 @@ use wg_2024::{
     network::NodeId,
     packet::{Packet, NodeType},
 };
+use crate::clients::client_chen::NodeInfo;
 use crate::network_initializer::DroneBrand;
 
 pub type MediaRef = String;
@@ -57,7 +58,7 @@ pub struct DisplayDataWebBrowser {
     pub flood_id: FloodId,
     pub session_id: SessionId,
     pub connected_node_ids: HashSet<NodeId>,
-    pub routing_table: HashMap<NodeId, Vec<NodeId>>,
+    pub topology: HashMap<NodeId, NodeInfo>,
     pub discovered_text_servers: HashSet<ServerId>,
     pub discovered_media_servers: HashSet<ServerId>,
     pub curr_received_file_list: Vec<String>,

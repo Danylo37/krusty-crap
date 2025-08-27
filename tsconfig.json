@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["DOM", "ES2020"],
+    "rootDir": "static_2/js",
+    "outDir": "static_2/js_build",
+    "strict": false,
+    "skipLibCheck": true
+  },
+  "include": [
+    "static_2/js/client.ts",
+    "static_2/js/controller.ts"
+  ]
+}
